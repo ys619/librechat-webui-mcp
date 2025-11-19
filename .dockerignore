@@ -1,0 +1,47 @@
+# Ignore Python virtual environments
+venv/
+.env/
+.envrc
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+
+# Ignore data and workspace outputs
+workspace/
+bi_outputs/
+*.csv
+*.xlsx
+*.log
+*.tmp
+
+# Ignore OS & IDE files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+*.bak
+*.orig
+
+# Ignore Docker-related artifacts
+docker-compose.override.yml
+*.tar
+*.gz
+
+# Ignore git and local repo metadata
+.git/
+.gitignore
+.gitattributes
+
+# Ignore cache and lock files
+*.lock
+__cache__/
+.cache/
+pip-wheel-metadata/
+build/
+dist/

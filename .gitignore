@@ -1,0 +1,35 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+**/key*
+**/*secret*
+**/*api*key*
+*.txt
+.vscode/
+.DS_Store
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment
+.env
+.env.*
+*.env
+
+# Secrets
+**/key*
+**/secret*
+**/*api*key*
+*.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,179 @@
+┌──────────────────────────────────────────────────────────────────┐
+│                         USER BROWSER                              │
+│                     http://localhost:3080                         │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (1) User types query
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                       LIBRECHAT UI                                │
+│              Container: librechat (172.18.0.5)                    │
+│                       Port: 3080                                  │
+│                                                                   │
+│  • Receives: "List employees"                                     │
+│  • Sends to: Google Gemini API                                    │
+│                                                                   │
+│  Log: Connected to MongoDB                                        │
+│  Log: MCP servers initialized successfully. Added 10 MCP tools    │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (2) API call to Gemini
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    GOOGLE GEMINI API                              │
+│                   gemini-2.0-flash model                          │
+│                                                                   │
+│  • Analyzes user query                                            │
+│  • Identifies: Need to query MongoDB                              │
+│  • Decides: Use MCP tool "query_collection"                       │
+│                                                                   │
+│  Available tools:                                                 │
+│   - query_collection                                              │
+│   - list_collections_via_django                                   │
+│   - smart_command                                                 │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (3) MCP tool call
+                       │ POST http://bi-universal:8000/mcp
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    MCP SERVER (FastMCP)                           │
+│                Container: bi-universal                            │
+│                       Port: 8000                                  │
+│                  File: bi_universal.py                            │
+│                                                                   │
+│  Endpoint: http://0.0.0.0:8000/mcp                                │
+│                                                                   │
+│  Environment:                                                     │
+│   ENABLE_DJANGO_API=true ✅                                       │
+│   DJANGO_API_URL=http://django-api:8001/api                       │
+│                                                                   │
+│  Log: 15:23:14 - "POST /mcp HTTP/1.1" 200 OK                      │
+│                                                                   │
+│  Function called: query_via_django()                              │
+│   ↓                                                               │
+│   if ENABLE_DJANGO_API:                                           │
+│       call_django_api("collections/query/", ...)                  │
+│   else:                                                           │
+│       query_collection(...) # Direct MongoDB                      │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (4) HTTP POST request
+                       │ requests.post(
+                       │   "http://django-api:8001/api/collections/query/",
+                       │   json={"collection":"employees", "filter":{}, "limit":100}
+                       │ )
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    DJANGO REST API                                │
+│                 Container: django-api                             │
+│                       Port: 8001                                  │
+│               File: mongodb_api/views.py                          │
+│                                                                   │
+│  Endpoint: http://0.0.0.0:8001/api/collections/query/             │
+│                                                                   │
+│  Log: [18/Nov/2025 09:53:14] "POST /collections/query/ HTTP/1.1"  │
+│       200 373                                                     │
+│                                                                   │
+│  View: CollectionQueryView.post()                                 │
+│   ↓                                                               │
+│   collection = request.data.get('collection')                     │
+│   filter_dict = request.data.get('filter', {})                    │
+│   limit = request.data.get('limit', 100)                          │
+│                                                                   │
+│   # Connect to MongoDB                                            │
+│   client = MongoClient('mongodb://admin:pass123@mongo:27017')    │
+│   db = client['companyDB']                                        │
+│   col = db['employees']                                           │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (5) MongoDB query
+                       │ col.find({}).limit(100)
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                        MONGODB                                    │
+│                   Container: mongo                                │
+│                       Port: 27017                                 │
+│                                                                   │
+│  Connection: mongodb://admin:pass123@mongo:27017                  │
+│  Database: companyDB                                              │
+│  Collection: employees                                            │
+│                                                                   │
+│  Query executed: db.employees.find({}).limit(100)                 │
+│                                                                   │
+│  Returns: 2 documents                                             │
+│  [                                                                │
+│    {_id: ObjectId(...), name: "Fahad", dept: "Finance"...},       │
+│    {_id: ObjectId(...), name: "Sagar", dept: "Sales"...}          │
+│  ]                                                                │
+│                                                                   │
+│  Log: Checkpointer running (healthy)                              │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (6) Data returns
+                       │ 2 documents
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    DJANGO REST API                                │
+│                                                                   │
+│  # Process results                                                │
+│  for doc in docs:                                                 │
+│      doc["_id"] = str(doc["_id"])  # Convert ObjectId            │
+│                                                                   │
+│  # Format response                                                │
+│  return Response({                                                │
+│      "collection": "employees",                                   │
+│      "documents_found": 2,                                        │
+│      "documents": [                                               │
+│          {"_id": "691c...", "name": "Fahad", ...},                │
+│          {"_id": "692d...", "name": "Sagar", ...}                 │
+│      ],                                                           │
+│      "status": "success"                                          │
+│  })                                                               │
+│                                                                   │
+│  Response size: 373 bytes                                         │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (7) JSON response
+                       │ {"collection":"employees", "documents":[...]}
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    MCP SERVER                                     │
+│                                                                   │
+│  # Receive Django response                                        │
+│  response.json() → {"collection": "employees", ...}               │
+│                                                                   │
+│  # Return to Gemini                                               │
+│  return {                                                         │
+│      "collection": "employees",                                   │
+│      "documents": [...],                                          │
+│      "status": "success"                                          │
+│  }                                                                │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (8) Tool result
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    GOOGLE GEMINI API                              │
+│                                                                   │
+│  # Process tool result                                            │
+│  # Format natural language response                               │
+│  # Generate: "The employee who has a Honda City is Fahad."        │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (9) AI response
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                       LIBRECHAT UI                                │
+│                                                                   │
+│  Display to user:                                                 │
+│  "The employee who has a Honda City is Fahad."                    │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+                       │ (10) Rendered output
+                       ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                         USER BROWSER                              │
+│                                                                   │
+│  User sees: "The employee who has a Honda City is Fahad."         │
+└──────────────────────────────────────────────────────────────────┘
